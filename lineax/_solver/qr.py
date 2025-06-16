@@ -14,7 +14,6 @@
 
 from typing import Any, TypeAlias
 
-import jax.numpy as jnp
 import jax.scipy as jsp
 from jaxtyping import Array, PyTree
 
@@ -41,14 +40,18 @@ class QR(AbstractLinearSolver):
 
     !!! info
 
-        Note that whilst this does handle non-square operators, it still can only
-        handle full-rank operators.
+        Note that whilst this does handle non-square operators, it can't handle
+        rank-deficient operators when `pivoting=False`.
 
-        This is because JAX does not currently support a rank-revealing/pivoted QR
-        decomposition, see [issue #12897](https://github.com/google/jax/issues/12897).
+        To handle rank-defficient operators set `pivoting=True`, this allows a
+        column-pivoted rank-revealing QR decomposition to be used. This decomposition
+        is generally faster than the SVD, at the cost of worse numerical stability.
 
-        For such use cases, switch to [`lineax.SVD`][] instead.
+        For some operators, it may be better to switch to [`lineax.SVD`][] for its
+        enhanced numerical stability.
     """
+
+    pivoting: bool = False
 
     def init(self, operator, options):
         del options
@@ -57,7 +60,7 @@ class QR(AbstractLinearSolver):
         transpose = n > m
         if transpose:
             matrix = matrix.T
-        qr = jnp.linalg.qr(matrix, mode="reduced")  # pyright: ignore
+        qr = jsp.linalg.qr(matrix, mode="economic", pivoting=self.pivoting)
         packed_structures = pack_structures(operator)
         return qr, transpose, packed_structures
 
@@ -101,6 +104,8 @@ class QR(AbstractLinearSolver):
         return conj_state, conj_options
 
     def allow_dependent_columns(self, operator):
+        if self.pivoting:
+            return True
         rows = operator.out_size()
         columns = operator.in_size()
         # We're able to pull an efficiency trick here.
@@ -113,6 +118,8 @@ class QR(AbstractLinearSolver):
         return columns > rows
 
     def allow_dependent_rows(self, operator):
+        if self.pivoting:
+            return True
         rows = operator.out_size()
         columns = operator.in_size()
         return rows > columns
@@ -120,5 +127,6 @@ class QR(AbstractLinearSolver):
 
 QR.__init__.__doc__ = """**Arguments:**
 
-Nothing.
+- `pivoting`: if to use a column-pivoted rank-revealing QR decomposition, required for
+    rank-defficient operators.
 """
