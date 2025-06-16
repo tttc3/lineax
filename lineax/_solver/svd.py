@@ -16,7 +16,6 @@ from typing import Any, TypeAlias
 
 import jax.lax as lax
 import jax.numpy as jnp
-import jax.scipy as jsp
 from jaxtyping import Array, PyTree
 
 from .._misc import resolve_rcond
@@ -45,10 +44,16 @@ class SVD(AbstractLinearSolver[_SVDState]):
     """
 
     rcond: float | None = None
+    algorithm: lax.linalg.SvdAlgorithm | None = None
 
     def init(self, operator: AbstractLinearOperator, options: dict[str, Any]):
         del options
-        svd = jsp.linalg.svd(operator.as_matrix(), full_matrices=False)
+        svd = lax.linalg.svd(
+            operator.as_matrix(),
+            full_matrices=False,
+            compute_uv=True,
+            algorithm=self.algorithm,
+        )
         packed_structures = pack_structures(operator)
         return svd, packed_structures
 
@@ -104,4 +109,6 @@ SVD.__init__.__doc__ = """**Arguments**:
 - `rcond`: the cutoff for handling zero entries on the diagonal. Defaults to machine
     precision times `max(N, M)`, where `(N, M)` is the shape of the operator. (I.e.
     `N` is the output size and `M` is the input size.)
+- `algorithm`: the algorithm use to compute the SVD - must be `None` or one of 
+    `jax.lax.linalg.SvdAlgorithm`.
 """
